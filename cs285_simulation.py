@@ -79,13 +79,13 @@ def generate_similarity_graph(rating_graph):
     pca = pcanode1(ratings) 
     sim = np.zeros((size, size))
     # building the similarity scores from PCA components
-    w = [0.6, 0.3, 0.1]
+    w = [0.6, 0.3, 0.1] # WEIGHTS 
     for i in range(size):
         for j in range(size):
             if i == j:
                 continue
             diffs = [abs(pca[i][k]-pca[j][k])*w[k] for k in range(len(w))]
-            sim[i][j] = 7-sum(diffs)
+            sim[i][j] = 7-sum(diffs) # 7 is magic centralizing factor - wat hax doge
     sims = [item for sublist in sim for item in sublist]
     plt.hist(sims, bins=[-10+0.5*i for i in range(40)])
     plt.show()
@@ -108,6 +108,70 @@ def normalize_edges(G):
         total = sum([abs(G.edge[a][b]['weight']) for b in G[a]])
         for b in G[a]:
             G.edge[a][b]['weight'] /= total
+
+# step 1a - assign each node credibility of 1/n
+# step 1b - create a copy of G as G'
+# step 2 - each node's cred in G' is cred = max(sum(edge weight * source cred in G FORALL incoming edges),0)
+# step 3 - G = G'
+# step 4 - if convergence then GOTO 7
+# step 5 - for each node, cred = (1-p) * cred 
+# step 5b - for each node with cred > 0, cred = cred + p/m, where m is set of all nodes where cred != 0 (this is the random walker)
+# step 6 - GOTO 2 
+# step 7 - return all trust valus and go home
+def assign_credibility(graph):
+    
+    G = graph
+    size = len(G.nodes())
+    
+    threshold = 1./(size*100)
+    mixing_factor = 0.01
+    converged = False
+
+    # step 1
+    for a in G.nodes():
+        G.node[a]['credibility'] = 1./(size)
+
+    while True:
+        converged = True
+        # step 1b
+        H = G.copy()
+
+        nonzero_counter = 0
+        # step 2
+        for node in G.nodes():
+            old_cred = G.node[node]['credibility']
+            new_cred = 0.
+            for src in G.predecessors(node):
+                new_cred += G.node[src]['credibility'] * G.edge[src][node]['weight']
+            new_cred = max(new_cred, 0)
+            
+            # track nonzero cred nodes for step 5
+            if new_cred > 0:
+                nonzero_counter += 1
+
+            if abs(new_cred - old_cred) > threshold:
+                converged = False
+        G = H.copy() # TODO: do we need .copy?
+        # step 4
+        if converged:
+            break
+
+
+        # step 5
+        for node in G.nodes():
+
+            if G.node[node]['credibility'] > 0:
+                # step 5a
+                G.node[node]['credibility'] *= (1. - mixing_factor)
+                # step 5b
+                G.node[node]['credibility'] += mixing_factor/nonzero_counter
+
+        # step 6 is end while
+
+    # step 7
+    # return G
+
+
 def main():
     print "Generating Voters..."
     voters = generate_voters(N)
@@ -123,6 +187,8 @@ def main():
     G = generate_graph(voters)
     H = generate_similarity_graph(G)
     normalize_edges(H)
+    assign_credibility(H)
+    print "DONE"
 
 if __name__ == '__main__':
     main()
