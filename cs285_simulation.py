@@ -69,12 +69,16 @@ def generate_similarity_graph(rating_graph):
     ratings = np.zeros((size, size))
     for a, b in rating_graph.edges():
         ratings[a][b] = rating_graph.edge[a][b]['weight']
+    # use 3 principal components in the PCA
     pcanode1 = mdp.nodes.PCANode(output_dim=3)
+    # train the model
     pcanode1.train(ratings)
     pcanode1.stop_training()
     print 'explained variance:', pcanode1.explained_variance
-    pca = pcanode1(ratings)
+    # run the model - get the results
+    pca = pcanode1(ratings) 
     sim = np.zeros((size, size))
+    # building the similarity scores from PCA components
     w = [0.6, 0.3, 0.1]
     for i in range(size):
         for j in range(size):
@@ -85,6 +89,7 @@ def generate_similarity_graph(rating_graph):
     sims = [item for sublist in sim for item in sublist]
     plt.hist(sims, bins=[-10+0.5*i for i in range(40)])
     plt.show()
+    # TODO - joseph wants to change thresholding to a top % model
     sim_thresh = 3.
     G = nx.DiGraph()
     G.node = rating_graph.node
