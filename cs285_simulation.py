@@ -10,10 +10,11 @@ Simulation
 
 
 """
-
 from scipy.stats import norm
 import networkx as nx
 import matplotlib.pyplot as plt
+import numpy as np
+import mdp
 
 N = 100
 
@@ -46,7 +47,7 @@ def generate_graph(voters):
     # n, k, p, [seed]
     # n = nodes
 
-    ws=nx.newman_watts_strogatz_graph(len(voters),len(voters)/10,0.1)
+    ws=nx.newman_watts_strogatz_graph(len(voters),len(voters)/10,1)
 
     G = nx.DiGraph(ws)
     for i in range(len(voters)):
@@ -57,12 +58,51 @@ def generate_graph(voters):
         
         G.edge[a][b]['weight'] = generate_rating(voters[a],voters[b])
 
-    nx.draw(G)
-    nx.draw_networkx_edge_labels(G,pos=nx.spring_layout(G))
-    plt.show()
+    #nx.draw(G)
+    #nx.draw_networkx_edge_labels(G,pos=nx.spring_layout(G))
+    #plt.show()
 
     return G
 
+def generate_similarity_graph(rating_graph):
+    size = len(rating_graph.nodes())
+    ratings = np.zeros((size, size))
+    for a, b in rating_graph.edges():
+        ratings[a][b] = rating_graph.edge[a][b]['weight']
+    pcanode1 = mdp.nodes.PCANode(output_dim=3)
+    pcanode1.train(ratings)
+    pcanode1.stop_training()
+    print 'explained variance:', pcanode1.explained_variance
+    pca = pcanode1(ratings)
+    sim = np.zeros((size, size))
+    w = [0.6, 0.3, 0.1]
+    for i in range(size):
+        for j in range(size):
+            if i == j:
+                continue
+            diffs = [abs(pca[i][k]-pca[j][k])*w[k] for k in range(len(w))]
+            sim[i][j] = 7-sum(diffs)
+    sims = [item for sublist in sim for item in sublist]
+    plt.hist(sims, bins=[-10+0.5*i for i in range(40)])
+    plt.show()
+    sim_thresh = 3.
+    G = nx.DiGraph()
+    G.node = rating_graph.node
+    for i in range(size):
+        for j in range(size):
+            if i == j:
+                continue
+            if abs(sim[i][j]) > sim_thresh:
+                G.add_edge(i, j, weight=sim[i][j])
+    nx.draw(G)
+    plt.show()
+    return G
+
+def normalize_edges(G):
+    for a in G.nodes():
+        total = sum([abs(G.edge[a][b]['weight']) for b in G[a]])
+        for b in G[a]:
+            G.edge[a][b]['weight'] /= total
 def main():
     print "Generating Voters..."
     voters = generate_voters(N)
@@ -76,7 +116,8 @@ def main():
 
     print "Generating Graph..."
     G = generate_graph(voters)
-
+    H = generate_similarity_graph(G)
+    normalize_edges(H)
 
 if __name__ == '__main__':
     main()
