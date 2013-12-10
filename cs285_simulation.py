@@ -124,14 +124,21 @@ def assign_credibility(graph):
     size = len(G.nodes())
     
     threshold = 1./(size*100)
+    # threshold = 0.001
     mixing_factor = 0.01
     converged = False
+    step_counter = 0
+
+    old_changes = []
+    old_cred_list = {}
 
     # step 1
     for a in G.nodes():
         G.node[a]['credibility'] = 1./(size)
 
     while True:
+        max_change = 0
+
         converged = True
         # step 1b
         H = G.copy()
@@ -139,37 +146,55 @@ def assign_credibility(graph):
         nonzero_counter = 0
         # step 2
         for node in G.nodes():
+            old_cred_list[node] = G.node[node]['credibility']
             old_cred = G.node[node]['credibility']
             new_cred = 0.
             for src in G.predecessors(node):
                 new_cred += G.node[src]['credibility'] * G.edge[src][node]['weight']
             new_cred = max(new_cred, 0)
-            
+            H.node[node]['credibility'] = new_cred
+
             # track nonzero cred nodes for step 5
             if new_cred > 0:
                 nonzero_counter += 1
 
-            if abs(new_cred - old_cred) > threshold:
-                converged = False
-        G = H.copy() # TODO: do we need .copy?
+        #     if abs(new_cred - old_cred) > threshold:
+        #         max_change = max(max_change, abs(new_cred - old_cred))
+        #         converged = False
+
+        # print "Step " + str(step_counter) + " Max Change " + str(max_change)
+        # step_counter += 1
+
+        G = H.copy()
+
         # step 4
+
+        # step 5
+        for node in H.nodes():
+
+            if H.node[node]['credibility'] > 0:
+                # step 5a
+                H.node[node]['credibility'] *= (1. - mixing_factor)
+                # step 5b
+                H.node[node]['credibility'] += mixing_factor/nonzero_counter
+
+            if abs(H.node[node]['credibility'] - old_cred_list[node]) > threshold:
+                max_change = max(max_change, abs(new_cred - old_cred))
+                converged = False
+        print "Step " + str(step_counter) + " Max Change " + str(max_change)
+        step_counter += 1
+
+        # if we converged, don't keep the random walk changes
         if converged:
             break
 
-
-        # step 5
-        for node in G.nodes():
-
-            if G.node[node]['credibility'] > 0:
-                # step 5a
-                G.node[node]['credibility'] *= (1. - mixing_factor)
-                # step 5b
-                G.node[node]['credibility'] += mixing_factor/nonzero_counter
+        G = H.copy() # TODO: do we need .copy?
 
         # step 6 is end while
 
     # step 7
     # return G
+
 
 
 def main():
