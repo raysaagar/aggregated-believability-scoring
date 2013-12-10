@@ -11,6 +11,7 @@ Simulation
 
 """
 from scipy.stats import norm
+from scipy.stats import pearsonr
 import networkx as nx
 import matplotlib.pyplot as plt
 import numpy as np
@@ -87,8 +88,8 @@ def generate_similarity_graph(rating_graph):
             diffs = [abs(pca[i][k]-pca[j][k])*w[k] for k in range(len(w))]
             sim[i][j] = 7-sum(diffs) # 7 is magic centralizing factor - wat hax doge
     sims = [item for sublist in sim for item in sublist]
-    plt.hist(sims, bins=[-10+0.5*i for i in range(40)])
-    plt.show()
+    # plt.hist(sims, bins=[-10+0.5*i for i in range(40)])
+    # plt.show()
     # TODO - joseph wants to change thresholding to a top % model
     sim_thresh = 3.
     G = nx.DiGraph()
@@ -99,8 +100,8 @@ def generate_similarity_graph(rating_graph):
                 continue
             if abs(sim[i][j]) > sim_thresh:
                 G.add_edge(i, j, weight=sim[i][j])
-    nx.draw(G)
-    plt.show()
+    # nx.draw(G)
+    # plt.show()
     return G
 
 def normalize_edges(G):
@@ -158,18 +159,12 @@ def assign_credibility(graph):
             if new_cred > 0:
                 nonzero_counter += 1
 
-        #     if abs(new_cred - old_cred) > threshold:
-        #         max_change = max(max_change, abs(new_cred - old_cred))
-        #         converged = False
-
-        # print "Step " + str(step_counter) + " Max Change " + str(max_change)
-        # step_counter += 1
-
+        # make initial copy here with the smoothed results
         G = H.copy()
 
         # step 4
 
-        # step 5
+        # step 5 - propogate a random walk
         for node in H.nodes():
 
             if H.node[node]['credibility'] > 0:
@@ -178,14 +173,18 @@ def assign_credibility(graph):
                 # step 5b
                 H.node[node]['credibility'] += mixing_factor/nonzero_counter
 
+            # check for convergence here
             if abs(H.node[node]['credibility'] - old_cred_list[node]) > threshold:
                 max_change = max(max_change, abs(new_cred - old_cred))
                 converged = False
-        print "Step " + str(step_counter) + " Max Change " + str(max_change)
+        # print "Step " + str(step_counter) + " Max Change " + str(max_change)
         step_counter += 1
 
         # if we converged, don't keep the random walk changes
         if converged:
+            # for node in H.nodes():
+            #     print H.node[node]['credibility']
+            return H
             break
 
         G = H.copy() # TODO: do we need .copy?
@@ -196,23 +195,47 @@ def assign_credibility(graph):
     # return G
 
 
+def calculate_correlation(rating_graph, cred_graph):
+    cred_list = []
+    error_list = []
+    
+    for node in cred_graph.nodes():
+        cred_list.append(cred_graph.node[node]['credibility'])
+        error_list.append(rating_graph.node[node]['error'])
+
+    correlation = pearsonr(error_list,cred_list)
+    # print cred_list
+    # plt.scatter(error_list,cred_list)
+    # plt.xlim(-2, 2)
+    #plt.ylim(0.0095, 0.0105)
+    # plt.show()
+    return correlation[0]
 
 def main():
-    print "Generating Voters..."
-    voters = generate_voters(N)
+    correlations = []
+    ntrials = 100
+    for i in range(ntrials):
+        print i
+        # print "Generating Voters..."
+        voters = generate_voters(N)
 
-    # print "TEST: CREATING A NEW RATING"
-    # print 'rater:', voters[0]
-    # print 'ratee:', voters[1]
-    # rating = generate_rating(voters[0], voters[1])
-    # print 'rating:', rating
-    # print 'error=', abs(voters[1]['score']-rating)
+        # print "Generating Graphs..."
+        G = generate_graph(voters)
+        rating_graph = G.copy()
+        
+        H = generate_similarity_graph(G)
 
-    print "Generating Graph..."
-    G = generate_graph(voters)
-    H = generate_similarity_graph(G)
-    normalize_edges(H)
-    assign_credibility(H)
+        # print "Normalizing Edges..."
+        normalize_edges(H)
+
+        # print "Calculating credibility scores"
+        cred_graph = assign_credibility(H)
+
+        correlations.append(calculate_correlation(rating_graph,cred_graph))
+
+    plt.hist(correlations, bins=[-1+0.05*i for i in range(40)])
+
+    plt.show()
     print "DONE"
 
 if __name__ == '__main__':
